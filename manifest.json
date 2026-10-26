@@ -1,0 +1,28 @@
+{
+  "$schema": "https://synra-app.dev/schema/manifest/v1.json",
+  "id": "@synra-plugin/starter",
+  "version": "0.1.0",
+  "title": "Synra Starter",
+  "description": "Examples of Synra host capabilities and diagnostics.",
+  "publisher": {
+    "id": "synra-official",
+    "name": "Synra"
+  },
+  "sdk": {
+    "min": "0.1.0"
+  },
+  "wit": "synra:plugin@1.0.0",
+  "runtime": {
+    "headless": {
+      "artifact": "plugin.wasm",
+      "stateful": false
+    }
+  },
+  "capabilities": [],
+  "actions": [
+    {
+      "name": "debug",
+      "description": "Read available host environment and plugin build information."
+    }
+  ]
+}
