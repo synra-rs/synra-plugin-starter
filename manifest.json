@@ -16,9 +16,22 @@
     "headless": {
       "artifact": "plugin.wasm",
       "stateful": false
+    },
+    "ui": {
+      "artifact": "ui.zip",
+      "entry": "index.html"
     }
   },
-  "capabilities": [],
+  "capabilities": [
+    {
+      "cap": "device:list",
+      "reason": "Show paired computers and their current connection status for explicit target selection."
+    },
+    {
+      "cap": "action:declare:debug",
+      "reason": "Register this plugin's local diagnostic action."
+    }
+  ],
   "actions": [
     {
       "name": "debug",

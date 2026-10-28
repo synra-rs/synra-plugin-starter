@@ -8,7 +8,10 @@ struct Plugin;
 
 impl exports::synra::plugin::lifecycle::Guest for Plugin {
     fn activate(_config_json: String) -> Outcome {
-        Outcome::Ok(String::new())
+        synra_plugin_sdk::host::action_declare(
+            "debug",
+            r#"{"type":"object","additionalProperties":false}"#,
+        )
     }
 
     fn deactivate() {}

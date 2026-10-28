@@ -4,16 +4,28 @@ version = "0.1.0"
 edition = "2024"
 rust-version = "1.88"
 license = "MIT"
-authors = ["imba97 <mail@imba97.cn>"]
+authors = [ "imba97 <mail@imba97.cn>" ]
 repository = "https://github.com/synra-rs/synra-plugin-starter"
 description = "Reference plugin for Synra host capabilities"
 publish = false
 
+[package.metadata.synra.ui]
+source = "ui/dist"
+command = [
+  "pnpm",
+  "--filter",
+  "@synra-plugin/starter-ui",
+  "build"
+]
+
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = [
+  "cdylib",
+  "rlib"
+]
 
 [dependencies]
-synra-plugin-sdk = { git = "https://github.com/synra-rs/synra-core.git", rev = "9c7c78b9788e5357ccb4537c9ff1f8d3abedea58" }
+synra-plugin-sdk = { git = "https://github.com/synra-rs/synra-core.git", rev = "e0c5481494b409af6fdbbdec9f78786ae4ee0612" }
 serde_json = "1"
 
 [profile.release]

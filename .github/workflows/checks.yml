@@ -16,6 +16,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 12.14.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm lint
+      - run: pnpm test
       - name: Install pinned Rust toolchain
         run: rustup toolchain install --no-self-update
       - uses: Swatinem/rust-cache@v2
@@ -24,11 +35,11 @@ jobs:
       - run: cargo test --locked
       - run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
       - name: Install matching author CLI
-        run: cargo install synra-plugin-cli --git https://github.com/synra-rs/synra-core.git --rev 3f70b0b98fcdc69ebe8e05d533430ea159e181d9 --locked
+        run: cargo install synra-plugin-cli --git https://github.com/synra-rs/synra-core.git --rev e0c5481494b409af6fdbbdec9f78786ae4ee0612 --locked
       - name: Build and verify actual Wasm component
         run: |
           synra-plugin build
-          synra-plugin verify
+          synra-plugin verify --dir dist
           git diff --exit-code -- Cargo.lock
 
   msrv:
