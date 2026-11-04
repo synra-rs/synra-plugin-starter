@@ -6,7 +6,7 @@ export const TARGET_TIMEOUT_MS = 8000
 type TargetHost = Pick<SynraClient, 'device'>
 type TargetId = DeviceTarget['deviceId']
 const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-const platforms = new Set(['windows', 'macos', 'linux', 'android', 'ios'])
+const platforms = new Set(['windows', 'macos', 'linux', 'android', 'ios', 'desktop', 'headless'])
 
 function refusal(reason: unknown): string {
   const code = typeof reason === 'object' && reason !== null && 'code' in reason ? reason.code : undefined
@@ -18,7 +18,7 @@ function refusal(reason: unknown): string {
 }
 
 export function isComputer(target: DeviceTarget): boolean {
-  return target.platform === 'windows' || target.platform === 'macos' || target.platform === 'linux'
+  return ['windows', 'macos', 'linux', 'desktop'].includes(target.platform)
 }
 
 /** Treat the native bridge answer as untrusted, even though its declaration is typed. */

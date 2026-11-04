@@ -23,6 +23,12 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+it('keeps a paired computer whose discovery record knows only its device kind', () => {
+  const targets = decodeTargets([{ ...pc, platform: 'desktop' }])
+  expect(targets).toHaveLength(1)
+  expect(targets[0]?.platform).toBe('desktop')
+})
+
 it('shows computers including offline peers and requires an explicit canonical target', async () => {
   const { state } = controller(async () => [pc, { ...other, online: false }, phone])
   await state.refresh()
