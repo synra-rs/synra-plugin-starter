@@ -27,16 +27,6 @@ const MAX_APP_ID: usize = 128;
 const MAX_REQUEST_ID: usize = 128;
 const MAX_RESPONSES: usize = 64;
 
-const SAFE_APPS: [(&str, &str, &str, &str); 2] = [
-    (
-        "synra.github",
-        "Synra GitHub",
-        "GH",
-        "https://github.com/synra-rs/synra-plugin-starter",
-    ),
-    ("synra.docs", "Synra 文档", "S", "https://synra-app.dev"),
-];
-
 static RESPONSES: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new();
 
 fn responses() -> &'static Mutex<HashMap<String, Value>> {
@@ -251,17 +241,7 @@ pub(crate) fn on_event(event_json: &str) -> Outcome {
         EVENT_APPS_LIST => reply(
             from,
             request_id,
-            Outcome::Ok(
-                serde_json::Value::Array(
-                    SAFE_APPS
-                        .iter()
-                        .map(|(id, name, icon, _)| {
-                            serde_json::json!({ "id": id, "name": name, "icon": icon })
-                        })
-                        .collect(),
-                )
-                .to_string(),
-            ),
+            Outcome::Ok(host_app_catalog().to_string()),
         ),
         EVENT_APPS_OPEN => {
             let Some(app_id) = payload.get("appId").and_then(Value::as_str) else {
@@ -271,14 +251,18 @@ pub(crate) fn on_event(event_json: &str) -> Outcome {
                     refused("badArgument", "event app id is invalid"),
                 );
             };
-            let Some((_, _, _, url)) = SAFE_APPS.iter().find(|(id, _, _, _)| *id == app_id) else {
+            if app_id.is_empty() || app_id.len() > MAX_APP_ID || !app_id.starts_with("synra-app-") {
                 return reply(
                     from,
                     request_id,
-                    refused("badArgument", "event app id is not registered"),
+                    refused("badArgument", "event app id is invalid"),
                 );
-            };
-            reply(from, request_id, host::platform_open_url(url))
+            }
+            reply(
+                from,
+                request_id,
+                host::platform_open_path(&format!("synra-app://{app_id}")),
+            )
         }
         _ => reply(
             from,
@@ -373,6 +357,22 @@ fn reply(from: &str, request_id: &str, outcome: Outcome) -> Outcome {
         Outcome::Ok(_) => Outcome::Ok(String::new()),
         Outcome::Err(error) => Outcome::Err(error),
     }
+}
+
+fn host_app_catalog() -> Value {
+    Value::Array(
+        host::platform_capabilities()
+            .into_iter()
+            .filter_map(|entry| {
+                let value = entry.strip_prefix("synra-app:")?;
+                let (id, name) = value.split_once('\t')?;
+                if id.is_empty() || name.is_empty() {
+                    return None;
+                }
+                Some(serde_json::json!({ "id": id, "name": name }))
+            })
+            .collect(),
+    )
 }
 
 fn is_supported_url(value: &str) -> bool {

@@ -202,7 +202,7 @@ dependencies = [
 
 [[package]]
 name = "synra-plugin-starter"
-version = "0.2.3"
+version = "0.2.4"
 dependencies = [
  "serde_json",
  "synra-plugin-sdk",
