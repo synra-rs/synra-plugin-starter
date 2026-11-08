@@ -65,6 +65,10 @@ async function sendToComputer() {
     writeAction.state.value = { status: 'failed', error: typeof reason === 'object' && reason !== null && 'code' in reason && typeof reason.code === 'string' ? reason.code : 'unsupported' }
     return
   }
+  if (!text.trim()) {
+    writeAction.state.value = { status: 'failed', error: 'empty_content' }
+    return
+  }
   if (text.length > MAX_CLIPBOARD) {
     writeAction.state.value = { status: 'failed', error: 'payload_too_large' }
     return

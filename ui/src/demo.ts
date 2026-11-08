@@ -19,6 +19,7 @@ const messages: Record<string, string> = {
   timeout: '请求超时，宿主仍可能正在处理。请等待后再重试。',
   invalid_argument: '演示参数不符合安全限制。',
   payload_too_large: '内容超过演示允许的大小限制。',
+  empty_content: '没有可发送的文本，请先在剪贴板中复制内容。',
   internal: '宿主未完成这次请求，请查看诊断页中的错误记录。',
 }
 
