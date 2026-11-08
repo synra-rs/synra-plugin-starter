@@ -1,0 +1,253 @@
+//! Starter showcase actions and their bounded argument validation.
+
+use serde_json::Value;
+use synra_plugin_sdk::{Error, Outcome, host};
+
+pub const OPEN_URL: &str = "starter.open-url";
+pub const CLIPBOARD_READ_SELECTION: &str = "starter.clipboard-read-selection";
+pub const CLIPBOARD_WRITE: &str = "starter.clipboard-write";
+pub const APPS_LIST: &str = "starter.apps-list";
+pub const APPS_OPEN: &str = "starter.apps-open";
+
+pub const EVENT_OPEN_URL: &str = "_plugin.@synra-plugin/starter.open-url";
+pub const EVENT_CLIPBOARD_READ_SELECTION: &str =
+    "_plugin.@synra-plugin/starter.clipboard-read-selection";
+pub const EVENT_CLIPBOARD_WRITE: &str = "_plugin.@synra-plugin/starter.clipboard-write";
+pub const EVENT_APPS_LIST: &str = "_plugin.@synra-plugin/starter.apps-list";
+pub const EVENT_APPS_OPEN: &str = "_plugin.@synra-plugin/starter.apps-open";
+
+const MAX_ARGS: usize = 64 * 1024;
+const MAX_TEXT: usize = 64 * 1024;
+const MAX_URL: usize = 2048;
+const MAX_APP_ID: usize = 128;
+
+pub(crate) fn declare() -> Outcome {
+    for (name, schema) in [
+        (
+            OPEN_URL,
+            r#"{"type":"object","properties":{"target":{"type":"string"},"url":{"type":"string"}},"required":["target","url"],"additionalProperties":false}"#,
+        ),
+        (
+            CLIPBOARD_READ_SELECTION,
+            r#"{"type":"object","properties":{"target":{"type":"string"}},"required":["target"],"additionalProperties":false}"#,
+        ),
+        (
+            CLIPBOARD_WRITE,
+            r#"{"type":"object","properties":{"target":{"type":"string"},"text":{"type":"string"}},"required":["target","text"],"additionalProperties":false}"#,
+        ),
+        (
+            APPS_LIST,
+            r#"{"type":"object","properties":{"target":{"type":"string"}},"required":["target"],"additionalProperties":false}"#,
+        ),
+        (
+            APPS_OPEN,
+            r#"{"type":"object","properties":{"target":{"type":"string"},"appId":{"type":"string"}},"required":["target","appId"],"additionalProperties":false}"#,
+        ),
+    ] {
+        if let Outcome::Err(error) = host::action_declare(name, schema) {
+            return Outcome::Err(error);
+        }
+    }
+    Outcome::Ok(String::new())
+}
+
+pub(crate) fn invoke(name: &str, args: &str) -> Outcome {
+    if args.len() > MAX_ARGS {
+        return refused("badArgument", "showcase arguments exceed 64 KiB");
+    }
+    let value = match serde_json::from_str::<Value>(args) {
+        Ok(Value::Object(value)) => value,
+        Ok(_) => return refused("badArgument", "showcase arguments must be a JSON object"),
+        Err(_) => return refused("badArgument", "showcase arguments are not valid JSON"),
+    };
+
+    match name {
+        OPEN_URL => {
+            let target = match required_string(&value, "target", 64) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            let url = match required_string(&value, "url", MAX_URL) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            if !is_device_id(target) {
+                return refused("badArgument", "target must be a canonical device id");
+            }
+            if !is_supported_url(url) {
+                return refused("badArgument", "only http and https URLs are supported");
+            }
+            send(target, EVENT_OPEN_URL, serde_json::json!({ "url": url }))
+        }
+        CLIPBOARD_READ_SELECTION => {
+            let target = match target(&value) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            send(
+                target,
+                EVENT_CLIPBOARD_READ_SELECTION,
+                serde_json::json!({}),
+            )
+        }
+        CLIPBOARD_WRITE => {
+            let target = match target(&value) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            let text = match required_string(&value, "text", MAX_TEXT) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            send(
+                target,
+                EVENT_CLIPBOARD_WRITE,
+                serde_json::json!({ "text": text }),
+            )
+        }
+        APPS_LIST => {
+            let target = match target(&value) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            send(target, EVENT_APPS_LIST, serde_json::json!({}))
+        }
+        APPS_OPEN => {
+            let target = match target(&value) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            let app_id = match required_string(&value, "appId", MAX_APP_ID) {
+                Ok(value) => value,
+                Err(error) => return error,
+            };
+            if app_id.trim().is_empty() {
+                return refused("badArgument", "appId cannot be empty");
+            }
+            send(
+                target,
+                EVENT_APPS_OPEN,
+                serde_json::json!({ "appId": app_id }),
+            )
+        }
+        _ => refused("actionNotFound", "unknown Starter showcase action"),
+    }
+}
+
+pub(crate) fn on_event(event_json: &str) -> Outcome {
+    let event = match serde_json::from_str::<Value>(event_json) {
+        Ok(Value::Object(value)) => value,
+        _ => return refused("badArgument", "event context is not valid JSON"),
+    };
+    let name = match event.get("event").and_then(Value::as_str) {
+        Some(value) => value,
+        None => return refused("badArgument", "event context has no event name"),
+    };
+    let payload = match event.get("payload") {
+        Some(Value::Object(value)) => value,
+        _ => return refused("badArgument", "event context has no object payload"),
+    };
+    match name {
+        EVENT_OPEN_URL => match payload.get("url").and_then(Value::as_str) {
+            Some(url) if is_supported_url(url) => host::platform_open_url(url),
+            _ => refused("badArgument", "event URL is invalid"),
+        },
+        EVENT_CLIPBOARD_WRITE => match payload.get("text").and_then(Value::as_str) {
+            Some(text) if text.len() <= MAX_TEXT => host::platform_write_clipboard(text),
+            _ => refused("badArgument", "event clipboard text is invalid"),
+        },
+        EVENT_CLIPBOARD_READ_SELECTION => match host::platform_read_clipboard() {
+            Outcome::Ok(text) => Outcome::Ok(text),
+            Outcome::Err(error) => Outcome::Err(error),
+        },
+        EVENT_APPS_LIST | EVENT_APPS_OPEN => refused(
+            "unsupported",
+            "the current host does not expose a safe application catalog",
+        ),
+        _ => refused("notImplemented", "this plugin does not handle that event"),
+    }
+}
+
+fn target(value: &serde_json::Map<String, Value>) -> Result<&str, Outcome> {
+    let target = required_string(value, "target", 64)?;
+    if !is_device_id(target) {
+        return Err(refused(
+            "badArgument",
+            "target must be a canonical device id",
+        ));
+    }
+    Ok(target)
+}
+
+fn required_string<'a>(
+    value: &'a serde_json::Map<String, Value>,
+    key: &str,
+    max: usize,
+) -> Result<&'a str, Outcome> {
+    let Some(value) = value.get(key).and_then(Value::as_str) else {
+        return Err(refused(
+            "badArgument",
+            "required showcase argument is missing",
+        ));
+    };
+    if value.is_empty() || value.len() > max {
+        return Err(refused(
+            "badArgument",
+            "showcase argument has an invalid length",
+        ));
+    }
+    Ok(value)
+}
+
+fn send(target: &str, event: &str, payload: Value) -> Outcome {
+    match host::device_send(target, event, &payload.to_string()) {
+        Outcome::Ok(_) => Outcome::Ok(r#"{"status":"queued"}"#.to_owned()),
+        Outcome::Err(error) => Outcome::Err(error),
+    }
+}
+
+fn is_supported_url(value: &str) -> bool {
+    (value.starts_with("https://") || value.starts_with("http://"))
+        && !value.chars().any(char::is_whitespace)
+        && value.len() <= MAX_URL
+}
+
+fn is_device_id(value: &str) -> bool {
+    value.len() == 36
+        && value.as_bytes().iter().enumerate().all(|(index, byte)| {
+            if matches!(index, 8 | 13 | 18 | 23) {
+                *byte == b'-'
+            } else {
+                matches!(*byte, b'0'..=b'9' | b'a'..=b'f')
+            }
+        })
+}
+
+fn refused(code: &str, message: &str) -> Outcome {
+    Outcome::Err(Error {
+        code: code.to_owned(),
+        message: message.to_owned(),
+        details: None,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{is_device_id, is_supported_url};
+
+    #[test]
+    fn validates_only_canonical_device_ids() {
+        assert!(is_device_id("11111111-1111-4111-8111-111111111111"));
+        assert!(!is_device_id("Laptop"));
+        assert!(!is_device_id("ABCDEFAB-1111-4111-8111-111111111111"));
+        assert!(!is_device_id("11111111111141118111111111111111"));
+    }
+
+    #[test]
+    fn validates_http_urls_without_accepting_commands() {
+        assert!(is_supported_url("https://synra-app.dev"));
+        assert!(is_supported_url("http://localhost:8080"));
+        assert!(!is_supported_url("file:///tmp/private"));
+        assert!(!is_supported_url("https://example.com/a b"));
+    }
+}

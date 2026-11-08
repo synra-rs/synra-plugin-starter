@@ -1,7 +1,9 @@
 import type { SynraClient } from '@synra/client'
 import { onScopeDispose, shallowRef } from 'vue'
 
-export type StarterHost = Pick<SynraClient, 'env' | 'self' | 'device'>
+export type StarterHost = Pick<SynraClient, 'env' | 'self' | 'device'> & {
+  clipboard?: Pick<SynraClient['clipboard'], 'read' | 'write'>
+}
 
 export interface DebugReport {
   pluginId: string

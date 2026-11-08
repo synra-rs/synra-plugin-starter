@@ -1,17 +1,19 @@
 # Synra Starter
 
 A reference Synra plugin with the identity `@synra-plugin/starter`.
-It combines a Rust/Wasm component with a Vue page to demonstrate the host–plugin boundary.
+It combines a Rust/Wasm component with a Vue page to demonstrate device collaboration, scoped capabilities and the host–plugin boundary.
 
 ## What it does
 
+- Shows a showcase page with home, demos, developer reference, diagnostics and about tabs.
+- Demonstrates URL requests, clipboard requests and a safe application-catalog boundary for an explicitly selected computer.
 - Displays plugin build information and the host's SDK version, kind, locale and theme.
-- Invokes its own `debug` action through the injected client and real Wasm component.
-- Lists paired computers, including discovered `desktop` targets, for explicit selection.
-- Reports unavailable hosts, offline devices and failed calls without inventing successful results.
+- Lists paired computers for explicit selection and keeps offline, denied and unsupported states distinct.
+- Validates action arguments in Rust/Wasm before requesting device or platform capabilities.
 
-The plugin requests `device:list` and `action:declare:debug`.
-Selecting a computer does not execute a remote action; selection capture and opening a link on that computer are not implemented.
+The plugin requests `device:list`, scoped `device:send:*`, the platform clipboard and URL capabilities and the declarations for its showcase actions.
+
+Remote event delivery is handled by the host's authenticated peer connection. The UI reports request admission separately from the computer's eventual action result.
 
 ## Use it
 

@@ -43,13 +43,14 @@ extracted entry/assets and self-RPC through real Wasmtime, including invalid req
 It does not render a WebView or prove phone-to-PC delivery.
 
 The application's separate desktop smoke entry has also exercised this package in a real
-Windows WebView: the existing diagnostic button reached Wasm through IPC and rendered its
-result. See the application's [development guide](https://github.com/synra-rs/synra-app/blob/main/CONTRIBUTING.md) for the isolated debug profile and explicit opt-in.
-Pixel layout and phone-to-PC delivery remain unverified; a successful local diagnostic is
-not acceptance of remote computer operations.
+Windows WebView: the diagnostic tab reached Wasm through IPC and rendered its result. See the
+application's [development guide](https://github.com/synra-rs/synra-app/blob/main/CONTRIBUTING.md)
+for the isolated debug profile and explicit opt-in. Pixel layout and phone-to-PC delivery remain
+unverified. A successful local diagnostic is not acceptance of remote computer operations.
 
 The target-computer panel reads the host's paired-device list with `device:list`, shows
 offline status, and requires an explicit canonical UUID selection. It never substitutes the
 first computer. Refreshes have a single in-flight request and an eight-second UI deadline;
 late replies after timeout or page exit are ignored. Device pairing or online status does not
-grant permission to execute a remote operation.
+grant permission to execute a remote operation. The showcase cards preserve `unsupported`,
+`capability_denied`, offline, timeout and queued states.

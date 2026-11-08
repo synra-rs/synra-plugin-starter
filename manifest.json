@@ -1,9 +1,9 @@
 {
   "$schema": "https://synra-app.dev/schema/manifest/v1.json",
   "id": "@synra-plugin/starter",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "title": "Synra Starter",
-  "description": "Examples of Synra host capabilities and diagnostics.",
+  "description": "Synra capability showcase, plugin reference and diagnostics.",
   "publisher": {
     "id": "synra-official",
     "name": "Synra"
@@ -28,14 +28,94 @@
       "reason": "Show paired computers and their current connection status for explicit target selection."
     },
     {
-      "cap": "action:declare:debug",
-      "reason": "Register this plugin's local diagnostic action."
+      "cap": "device:send:*",
+      "reason": "Send the selected showcase request to an explicitly chosen computer."
+    },
+    {
+      "cap": "platform:open-url",
+      "reason": "Open a URL on the computer receiving a showcase request."
+    },
+    {
+      "cap": "platform:read-clipboard",
+      "reason": "Read clipboard text on a computer for the clipboard demonstration."
+    },
+    {
+      "cap": "platform:write-clipboard",
+      "reason": "Write clipboard text on a computer for the clipboard demonstration."
+    },
+    {
+      "cap": "action:declare:*",
+      "reason": "Register Starter's diagnostic and showcase actions."
+    },
+    {
+      "cap": "event:subscribe:_plugin.@synra-plugin/starter.*",
+      "reason": "Receive the selected computer's response for Starter showcase requests."
     }
   ],
   "actions": [
     {
       "name": "debug",
       "description": "Read available host environment and plugin build information."
+    },
+    {
+      "name": "starter.open-url",
+      "description": "Ask an explicitly selected computer to open a supported URL.",
+      "args": {
+        "type": "object",
+        "properties": { "target": { "type": "string" }, "url": { "type": "string" } },
+        "required": ["target", "url"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "starter.clipboard-read-selection",
+      "description": "Ask the selected computer for its current clipboard text.",
+      "args": {
+        "type": "object",
+        "properties": { "target": { "type": "string" } },
+        "required": ["target"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "starter.clipboard-write",
+      "description": "Send text to the selected computer clipboard.",
+      "args": {
+        "type": "object",
+        "properties": { "target": { "type": "string" }, "text": { "type": "string" } },
+        "required": ["target", "text"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "starter.apps-list",
+      "description": "Ask the selected computer for its safe showcase application list.",
+      "args": {
+        "type": "object",
+        "properties": { "target": { "type": "string" } },
+        "required": ["target"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "starter.apps-open",
+      "description": "Ask the selected computer to open a registered application.",
+      "args": {
+        "type": "object",
+        "properties": { "target": { "type": "string" }, "appId": { "type": "string" } },
+        "required": ["target", "appId"],
+        "additionalProperties": false
+      }
     }
+  ],
+  "events": [
+    { "name": "_plugin.@synra-plugin/starter.open-url", "payload": { "type": "object", "required": ["url"], "properties": { "url": { "type": "string", "maxLength": 2048 } }, "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.clipboard-read-selection", "payload": { "type": "object", "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.clipboard-write", "payload": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string", "maxLength": 65536 } }, "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.apps-list", "payload": { "type": "object", "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.apps-open", "payload": { "type": "object", "required": ["appId"], "properties": { "appId": { "type": "string", "maxLength": 128 } }, "additionalProperties": false } }
+  ],
+  "handles": [
+    { "event": "_plugin.@synra-plugin/starter.*" }
   ]
 }

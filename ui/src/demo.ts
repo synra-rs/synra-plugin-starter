@@ -1,0 +1,92 @@
+import type { StarterHost } from './diagnostics'
+import { onScopeDispose, shallowRef } from 'vue'
+
+export type DemoStatus = 'idle' | 'sending' | 'queued' | 'unsupported' | 'offline' | 'denied' | 'timeout' | 'failed'
+
+export interface DemoState {
+  status: DemoStatus
+  error: string
+}
+
+export const DEMO_TIMEOUT_MS = 8000
+
+const messages: Record<string, string> = {
+  bridge_unavailable: '请在 Synra 中打开此插件。',
+  capability_denied: '当前演示未获授权，请在宿主的插件权限中允许对应能力。',
+  unsupported: '当前宿主尚未实现这项演示能力。',
+  device_offline: '目标电脑已离线，请刷新设备列表后重试。',
+  timeout: '请求超时，宿主仍可能正在处理。请等待后再重试。',
+  invalid_argument: '演示参数不符合安全限制。',
+  payload_too_large: '内容超过演示允许的大小限制。',
+  internal: '宿主未完成这次请求，请查看诊断页中的错误记录。',
+}
+
+function codeOf(reason: unknown): string {
+  if (typeof reason === 'object' && reason !== null && 'code' in reason && typeof reason.code === 'string')
+    return reason.code
+  return reason instanceof Error && reason.message === 'timeout' ? 'timeout' : 'internal'
+}
+
+export function messageFor(code: string): string {
+  return messages[code] ?? messages.internal
+}
+
+export function isSupportedUrl(value: string): boolean {
+  return /^https?:\/\/\S+$/i.test(value) && value.length <= 2048
+}
+
+export function useDemoAction(host: StarterHost | undefined, action: string) {
+  const state = shallowRef<DemoState>({ status: host ? 'idle' : 'unsupported', error: host ? '' : 'bridge_unavailable' })
+  let active = false
+  let disposed = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  function clearTimer() {
+    clearTimeout(timer)
+    timer = undefined
+  }
+
+  onScopeDispose(() => {
+    disposed = true
+    clearTimer()
+  })
+
+  async function run(args: Record<string, unknown>): Promise<unknown> {
+    if (!host || active || disposed)
+      return undefined
+    active = true
+    state.value = { status: 'sending', error: '' }
+    let expired = false
+    timer = setTimeout(() => {
+      expired = true
+      state.value = { status: 'timeout', error: 'timeout' }
+    }, DEMO_TIMEOUT_MS)
+    try {
+      const result = await host.self.invoke(action, args)
+      if (!expired && !disposed)
+        state.value = { status: 'queued', error: '' }
+      return result
+    }
+    catch (reason: unknown) {
+      const code = codeOf(reason)
+      if (!expired && !disposed) {
+        state.value = {
+          status: code === 'capability_denied' ? 'denied' : code === 'device_offline' ? 'offline' : code === 'unsupported' ? 'unsupported' : 'failed',
+          error: code,
+        }
+      }
+      return undefined
+    }
+    finally {
+      clearTimer()
+      active = false
+    }
+  }
+
+  return { state, run }
+}
+
+export function safePreview(value: string, max = 160): string {
+  const trimmed = value.trim()
+  return trimmed.length <= max ? trimmed : `${trimmed.slice(0, max)}…`
+}

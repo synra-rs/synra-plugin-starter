@@ -8,10 +8,13 @@ struct Plugin;
 
 impl exports::synra::plugin::lifecycle::Guest for Plugin {
     fn activate(_config_json: String) -> Outcome {
-        synra_plugin_sdk::host::action_declare(
+        if let Outcome::Err(error) = synra_plugin_sdk::host::action_declare(
             "debug",
             r#"{"type":"object","additionalProperties":false}"#,
-        )
+        ) {
+            return Outcome::Err(error);
+        }
+        crate::actions::declare()
     }
 
     fn deactivate() {}
@@ -25,11 +28,7 @@ impl exports::synra::plugin::lifecycle::Guest for Plugin {
     }
 
     fn on_event(_event_json: String) -> Outcome {
-        Outcome::Err(Error {
-            code: "notImplemented".to_owned(),
-            message: "this plugin declares no event handlers".to_owned(),
-            details: None,
-        })
+        crate::actions::on_event(&_event_json)
     }
 }
 
@@ -45,12 +44,15 @@ impl exports::synra::plugin::share::Guest for Plugin {
 
 impl exports::synra::plugin::actions::Guest for Plugin {
     fn invoke(name: String, args_json: String) -> Outcome {
-        crate::debug::invoke(&name, &args_json, || crate::debug::Environment {
-            sdk_version: synra_plugin_sdk::host::env_sdk_version(),
-            host_kind: synra_plugin_sdk::host::env_host_kind(),
-            locale: synra_plugin_sdk::host::env_locale(),
-            dark_mode: synra_plugin_sdk::host::env_dark_mode(),
-        })
+        if name == "debug" {
+            return crate::debug::invoke(&name, &args_json, || crate::debug::Environment {
+                sdk_version: synra_plugin_sdk::host::env_sdk_version(),
+                host_kind: synra_plugin_sdk::host::env_host_kind(),
+                locale: synra_plugin_sdk::host::env_locale(),
+                dark_mode: synra_plugin_sdk::host::env_dark_mode(),
+            });
+        }
+        crate::actions::invoke(&name, &args_json)
     }
 }
 

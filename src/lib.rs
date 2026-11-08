@@ -6,4 +6,8 @@
 mod guest;
 
 #[cfg(any(target_arch = "wasm32", test))]
+#[allow(dead_code)]
+mod actions;
+
+#[cfg(any(target_arch = "wasm32", test))]
 mod debug;

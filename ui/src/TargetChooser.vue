@@ -3,8 +3,9 @@ import type { StarterHost } from './diagnostics'
 import { onMounted } from 'vue'
 import { useTargets } from './targets'
 
-const props = defineProps<{ host?: StarterHost }>()
-const { computers, selected, pending, error, select, refresh } = useTargets(props.host)
+const props = defineProps<{ host?: StarterHost, state?: ReturnType<typeof useTargets> }>()
+const state = props.state ?? useTargets(props.host)
+const { computers, selected, pending, error, select, refresh } = state
 const messages: Record<string, string> = {
   bridge_unavailable: '请在 Synra 中打开此插件。',
   capability_denied: '设备列表未获授权或页面会话已失效，请在宿主中检查授权后重新打开。',
@@ -17,7 +18,7 @@ onMounted(refresh)
 </script>
 
 <template>
-  <section class="card" aria-labelledby="target-title">
+  <section class="card target-card" aria-labelledby="target-title">
     <div class="section-heading">
       <h2 id="target-title">
         目标电脑
