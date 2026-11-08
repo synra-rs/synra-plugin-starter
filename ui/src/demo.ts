@@ -1,7 +1,7 @@
 import type { StarterHost } from './diagnostics'
 import { onScopeDispose, shallowRef } from 'vue'
 
-export type DemoStatus = 'idle' | 'sending' | 'queued' | 'unsupported' | 'offline' | 'denied' | 'timeout' | 'failed'
+export type DemoStatus = 'idle' | 'sending' | 'queued' | 'completed' | 'unsupported' | 'offline' | 'denied' | 'timeout' | 'failed'
 
 export interface DemoState {
   status: DemoStatus
@@ -9,6 +9,7 @@ export interface DemoState {
 }
 
 export const DEMO_TIMEOUT_MS = 8000
+export const RESPONSE_TIMEOUT_MS = 7000
 
 const messages: Record<string, string> = {
   bridge_unavailable: '请在 Synra 中打开此插件。',
@@ -33,6 +34,45 @@ export function messageFor(code: string): string {
 
 export function isSupportedUrl(value: string): boolean {
   return /^https?:\/\/\S+$/i.test(value) && value.length <= 2048
+}
+
+interface RemoteResponse {
+  requestId: string
+  status: 'pending' | 'ok' | 'error'
+  value?: unknown
+  code?: string
+  message?: string
+}
+
+function remoteResponse(value: unknown): RemoteResponse | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    return undefined
+  const row = value as Record<string, unknown>
+  if (typeof row.requestId !== 'string' || !['pending', 'ok', 'error'].includes(String(row.status)))
+    return undefined
+  return {
+    requestId: row.requestId,
+    status: row.status as RemoteResponse['status'],
+    value: row.value,
+    code: typeof row.code === 'string' ? row.code : undefined,
+    message: typeof row.message === 'string' ? row.message : undefined,
+  }
+}
+
+export async function waitForRemoteResponse(host: StarterHost, requestId: string): Promise<RemoteResponse | undefined> {
+  const deadline = Date.now() + RESPONSE_TIMEOUT_MS
+  while (Date.now() < deadline) {
+    try {
+      const answer = remoteResponse(await host.self.invoke('starter.response-poll', { requestId }))
+      if (answer && answer.status !== 'pending')
+        return answer
+    }
+    catch {
+      // The stateful headless instance may still be handling the response event.
+    }
+    await new Promise(resolve => setTimeout(resolve, 150))
+  }
+  return undefined
 }
 
 export function useDemoAction(host: StarterHost | undefined, action: string) {

@@ -37,5 +37,6 @@ export function hostWith(invoke: () => Promise<unknown>): StarterHost {
       hostSupports: () => false,
       can: () => false,
     },
+    requestId: () => '01TESTREQUEST0000000000000000',
   }
 }

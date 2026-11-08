@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { StarterHost } from './diagnostics'
 import { computed, ref, watch } from 'vue'
-import { messageFor, useDemoAction } from './demo'
+import { messageFor, useDemoAction, waitForRemoteResponse } from './demo'
 
 interface AppEntry { id: string, name: string, icon?: string }
 const props = defineProps<{ host?: StarterHost, targetId?: string, targetOnline?: boolean }>()
@@ -14,21 +14,53 @@ const canUseTarget = computed(() => Boolean(props.host && props.targetId && prop
 async function refresh() {
   if (!canUseTarget.value)
     return
-  const answer = await listAction.run({ target: props.targetId })
-  if (!Array.isArray(answer))
+  const requestId = props.host?.requestId()
+  if (!requestId)
     return
-  apps.value = answer.flatMap((item: unknown) => {
+  const queued = await listAction.run({ target: props.targetId, requestId })
+  if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
+    return
+  const response = await waitForRemoteResponse(props.host!, requestId)
+  if (!response) {
+    listAction.state.value = { status: 'timeout', error: 'timeout' }
+    return
+  }
+  if (response.status === 'error') {
+    listAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
+    return
+  }
+  if (!Array.isArray(response.value)) {
+    listAction.state.value = { status: 'failed', error: 'internal' }
+    return
+  }
+  apps.value = response.value.flatMap((item: unknown) => {
     if (typeof item !== 'object' || item === null || !('id' in item) || !('name' in item))
       return []
     if (typeof item.id !== 'string' || !item.id || typeof item.name !== 'string' || !item.name)
       return []
     return [{ id: item.id, name: item.name, icon: 'icon' in item && typeof item.icon === 'string' ? item.icon : undefined }]
   }).slice(0, 64)
+  listAction.state.value = { status: 'completed', error: '' }
 }
 
 async function openApp(app: AppEntry) {
   selectedApp.value = app.id
-  await openAction.run({ target: props.targetId, appId: app.id })
+  const requestId = props.host?.requestId()
+  if (!requestId)
+    return
+  const queued = await openAction.run({ target: props.targetId, requestId, appId: app.id })
+  if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
+    return
+  const response = await waitForRemoteResponse(props.host!, requestId)
+  if (!response) {
+    openAction.state.value = { status: 'timeout', error: 'timeout' }
+  }
+  else if (response.status === 'ok') {
+    openAction.state.value = { status: 'completed', error: '' }
+  }
+  else {
+    openAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
+  }
 }
 
 watch(() => [props.targetId, props.targetOnline] as const, ([targetId, online], previous) => {
@@ -67,13 +99,19 @@ watch(() => [props.targetId, props.targetOnline] as const, ([targetId, online], 
     <p v-else class="empty" role="status">
       当前宿主没有返回可展示的安全应用目录。
     </p>
-    <p v-if="listAction.state.value.status === 'queued'" class="success" role="status">
+    <p v-if="listAction.state.value.status === 'completed'" class="success" role="status">
+      电脑端已返回应用目录。
+    </p>
+    <p v-else-if="listAction.state.value.status === 'queued'" class="success" role="status">
       目录请求已发出，等待电脑端返回白名单。
     </p>
     <p v-else-if="listAction.state.value.error" class="error" role="alert">
       {{ messageFor(listAction.state.value.error) }}
     </p>
-    <p v-if="openAction.state.value.status === 'queued'" class="success" role="status">
+    <p v-if="openAction.state.value.status === 'completed'" class="success" role="status">
+      电脑端已执行打开请求。
+    </p>
+    <p v-else-if="openAction.state.value.status === 'queued'" class="success" role="status">
       打开请求已发出，等待电脑端执行。
     </p>
     <p v-else-if="openAction.state.value.error" class="error" role="alert">

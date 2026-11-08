@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { StarterHost } from './diagnostics'
 import { computed, ref } from 'vue'
-import { isSupportedUrl, messageFor, useDemoAction } from './demo'
+import { isSupportedUrl, messageFor, useDemoAction, waitForRemoteResponse } from './demo'
 
 const props = defineProps<{ host?: StarterHost, targetId?: string, targetOnline?: boolean }>()
 const url = ref('')
@@ -19,7 +19,27 @@ function setUrl(value: string) {
 async function send() {
   if (!canSend.value)
     return
-  await action.run({ target: props.targetId, url: url.value.trim() })
+  const requestId = props.host?.requestId()
+  if (!requestId)
+    return
+  const queued = await action.run({ target: props.targetId, requestId, url: url.value.trim() })
+  if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
+    return
+  try {
+    const response = await waitForRemoteResponse(props.host!, requestId)
+    if (!response) {
+      action.state.value = { status: 'timeout', error: 'timeout' }
+    }
+    else if (response.status === 'ok') {
+      action.state.value = { status: 'completed', error: '' }
+    }
+    else {
+      action.state.value = { status: 'failed', error: response.code ?? 'internal' }
+    }
+  }
+  catch {
+    action.state.value = { status: 'failed', error: 'internal' }
+  }
 }
 </script>
 
@@ -57,7 +77,10 @@ async function send() {
     <p v-else-if="props.targetOnline === false" class="error" role="alert">
       目标电脑离线，当前无法发送。
     </p>
-    <p v-if="action.state.value.status === 'queued'" class="success" role="status">
+    <p v-if="action.state.value.status === 'completed'" class="success" role="status">
+      电脑已打开链接。
+    </p>
+    <p v-else-if="action.state.value.status === 'queued'" class="success" role="status">
       请求已发出，等待电脑端执行结果。
     </p>
     <p v-else-if="action.state.value.error" class="error" role="alert">

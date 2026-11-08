@@ -1,7 +1,7 @@
 {
   "$schema": "https://synra-app.dev/schema/manifest/v1.json",
   "id": "@synra-plugin/starter",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "title": "Synra Starter",
   "description": "Synra capability showcase, plugin reference and diagnostics.",
   "publisher": {
@@ -15,7 +15,7 @@
   "runtime": {
     "headless": {
       "artifact": "plugin.wasm",
-      "stateful": false
+      "stateful": true
     },
     "ui": {
       "artifact": "ui.zip",
@@ -62,8 +62,8 @@
       "description": "Ask an explicitly selected computer to open a supported URL.",
       "args": {
         "type": "object",
-        "properties": { "target": { "type": "string" }, "url": { "type": "string" } },
-        "required": ["target", "url"],
+        "properties": { "target": { "type": "string" }, "requestId": { "type": "string" }, "url": { "type": "string" } },
+        "required": ["target", "requestId", "url"],
         "additionalProperties": false
       }
     },
@@ -72,8 +72,8 @@
       "description": "Ask the selected computer for its current clipboard text.",
       "args": {
         "type": "object",
-        "properties": { "target": { "type": "string" } },
-        "required": ["target"],
+        "properties": { "target": { "type": "string" }, "requestId": { "type": "string" } },
+        "required": ["target", "requestId"],
         "additionalProperties": false
       }
     },
@@ -82,8 +82,8 @@
       "description": "Send text to the selected computer clipboard.",
       "args": {
         "type": "object",
-        "properties": { "target": { "type": "string" }, "text": { "type": "string" } },
-        "required": ["target", "text"],
+        "properties": { "target": { "type": "string" }, "requestId": { "type": "string" }, "text": { "type": "string" } },
+        "required": ["target", "requestId", "text"],
         "additionalProperties": false
       }
     },
@@ -92,8 +92,8 @@
       "description": "Ask the selected computer for its safe showcase application list.",
       "args": {
         "type": "object",
-        "properties": { "target": { "type": "string" } },
-        "required": ["target"],
+        "properties": { "target": { "type": "string" }, "requestId": { "type": "string" } },
+        "required": ["target", "requestId"],
         "additionalProperties": false
       }
     },
@@ -102,18 +102,29 @@
       "description": "Ask the selected computer to open a registered application.",
       "args": {
         "type": "object",
-        "properties": { "target": { "type": "string" }, "appId": { "type": "string" } },
-        "required": ["target", "appId"],
+        "properties": { "target": { "type": "string" }, "requestId": { "type": "string" }, "appId": { "type": "string" } },
+        "required": ["target", "requestId", "appId"],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "starter.response-poll",
+      "description": "Read the execution result of a Starter showcase request.",
+      "args": {
+        "type": "object",
+        "properties": { "requestId": { "type": "string" } },
+        "required": ["requestId"],
         "additionalProperties": false
       }
     }
   ],
   "events": [
-    { "name": "_plugin.@synra-plugin/starter.open-url", "payload": { "type": "object", "required": ["url"], "properties": { "url": { "type": "string", "maxLength": 2048 } }, "additionalProperties": false } },
-    { "name": "_plugin.@synra-plugin/starter.clipboard-read-selection", "payload": { "type": "object", "additionalProperties": false } },
-    { "name": "_plugin.@synra-plugin/starter.clipboard-write", "payload": { "type": "object", "required": ["text"], "properties": { "text": { "type": "string", "maxLength": 65536 } }, "additionalProperties": false } },
-    { "name": "_plugin.@synra-plugin/starter.apps-list", "payload": { "type": "object", "additionalProperties": false } },
-    { "name": "_plugin.@synra-plugin/starter.apps-open", "payload": { "type": "object", "required": ["appId"], "properties": { "appId": { "type": "string", "maxLength": 128 } }, "additionalProperties": false } }
+    { "name": "_plugin.@synra-plugin/starter.open-url", "payload": { "type": "object", "required": ["requestId", "url"], "properties": { "requestId": { "type": "string", "maxLength": 128 }, "url": { "type": "string", "maxLength": 2048 } }, "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.clipboard-read-selection", "payload": { "type": "object", "required": ["requestId"], "properties": { "requestId": { "type": "string", "maxLength": 128 } }, "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.clipboard-write", "payload": { "type": "object", "required": ["requestId", "text"], "properties": { "requestId": { "type": "string", "maxLength": 128 }, "text": { "type": "string", "maxLength": 65536 } }, "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.apps-list", "payload": { "type": "object", "required": ["requestId"], "properties": { "requestId": { "type": "string", "maxLength": 128 } }, "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.apps-open", "payload": { "type": "object", "required": ["requestId", "appId"], "properties": { "requestId": { "type": "string", "maxLength": 128 }, "appId": { "type": "string", "maxLength": 128 } }, "additionalProperties": false } },
+    { "name": "_plugin.@synra-plugin/starter.response", "payload": { "type": "object", "required": ["requestId", "status"], "properties": { "requestId": { "type": "string", "maxLength": 128 }, "status": { "type": "string", "maxLength": 16 }, "code": { "type": "string", "maxLength": 64 }, "message": { "type": "string", "maxLength": 256 }, "value": {} }, "additionalProperties": false } }
   ],
   "handles": [
     { "event": "_plugin.@synra-plugin/starter.*" }

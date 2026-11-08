@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { StarterHost } from './diagnostics'
 import { computed, ref } from 'vue'
-import { messageFor, safePreview, useDemoAction } from './demo'
+import { messageFor, safePreview, useDemoAction, waitForRemoteResponse } from './demo'
 
 const props = defineProps<{ host?: StarterHost, targetId?: string, targetOnline?: boolean }>()
 const MAX_CLIPBOARD = 64 * 1024
@@ -16,22 +16,34 @@ const canUseTarget = computed(() => Boolean(props.host && props.targetId && prop
 async function readFromComputer() {
   if (!canUseTarget.value)
     return
-  const answer = await readAction.run({ target: props.targetId })
-  const text = typeof answer === 'object' && answer !== null && 'text' in answer && typeof answer.text === 'string'
-    ? answer.text
-    : undefined
-  if (text === undefined || text.length > MAX_CLIPBOARD) {
-    returnedText.value = ''
-    phoneCopyMessage.value = ''
+  const requestId = props.host?.requestId()
+  if (!requestId)
     return
-  }
-  returnedText.value = text
+  const queued = await readAction.run({ target: props.targetId, requestId })
+  if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
+    return
   try {
+    const response = await waitForRemoteResponse(props.host!, requestId)
+    if (!response) {
+      readAction.state.value = { status: 'timeout', error: 'timeout' }
+      return
+    }
+    if (response.status === 'error') {
+      readAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
+      return
+    }
+    const text = typeof response.value === 'string' ? response.value : undefined
+    if (text === undefined || text.length > MAX_CLIPBOARD) {
+      readAction.state.value = { status: 'failed', error: 'internal' }
+      return
+    }
+    returnedText.value = text
     if (props.host?.clipboard)
       await props.host.clipboard.write(text)
     else if (navigator.clipboard)
       await navigator.clipboard.writeText(text)
     phoneCopyMessage.value = '已复制到手机剪贴板'
+    readAction.state.value = { status: 'completed', error: '' }
   }
   catch (reason: unknown) {
     phoneCopyMessage.value = ''
@@ -58,7 +70,27 @@ async function sendToComputer() {
     return
   }
   copiedText.value = safePreview(text)
-  await writeAction.run({ target: props.targetId, text })
+  const requestId = props.host?.requestId()
+  if (!requestId)
+    return
+  const queued = await writeAction.run({ target: props.targetId, requestId, text })
+  if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
+    return
+  try {
+    const response = await waitForRemoteResponse(props.host!, requestId)
+    if (!response) {
+      writeAction.state.value = { status: 'timeout', error: 'timeout' }
+    }
+    else if (response.status === 'ok') {
+      writeAction.state.value = { status: 'completed', error: '' }
+    }
+    else {
+      writeAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
+    }
+  }
+  catch {
+    writeAction.state.value = { status: 'failed', error: 'internal' }
+  }
 }
 
 function updateLocalClipboard(event: Event) {
@@ -94,7 +126,10 @@ function updateLocalClipboard(event: Event) {
         <p v-if="phoneCopyMessage" class="success" role="status">
           {{ phoneCopyMessage }}
         </p>
-        <p v-if="readAction.state.value.status === 'queued'" class="success" role="status">
+        <p v-if="readAction.state.value.status === 'completed'" class="success" role="status">
+          已复制到手机剪贴板。
+        </p>
+        <p v-else-if="readAction.state.value.status === 'queued'" class="success" role="status">
           请求已发出，等待电脑返回文本。
         </p>
         <p v-else-if="readAction.state.value.error" class="error" role="alert">
@@ -114,7 +149,10 @@ function updateLocalClipboard(event: Event) {
         <p v-if="copiedText" class="hint">
           发送内容预览：{{ copiedText }}
         </p>
-        <p v-if="writeAction.state.value.status === 'queued'" class="success" role="status">
+        <p v-if="writeAction.state.value.status === 'completed'" class="success" role="status">
+          电脑剪贴板已写入。
+        </p>
+        <p v-else-if="writeAction.state.value.status === 'queued'" class="success" role="status">
           请求已发出，等待电脑端写入。
         </p>
         <p v-else-if="writeAction.state.value.error" class="error" role="alert">
