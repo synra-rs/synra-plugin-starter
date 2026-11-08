@@ -221,7 +221,11 @@ pub(crate) fn on_event(event_json: &str) -> Outcome {
             Some(url) if is_supported_url(url) => {
                 reply(from, request_id, host::platform_open_url(url))
             }
-            _ => reply(from, request_id, refused("badArgument", "event URL is invalid")),
+            _ => reply(
+                from,
+                request_id,
+                refused("badArgument", "event URL is invalid"),
+            ),
         },
         EVENT_CLIPBOARD_WRITE => match payload.get("text").and_then(Value::as_str) {
             Some(text) if text.len() <= MAX_TEXT => {
@@ -233,9 +237,7 @@ pub(crate) fn on_event(event_json: &str) -> Outcome {
                 refused("badArgument", "event clipboard text is invalid"),
             ),
         },
-        EVENT_CLIPBOARD_READ_SELECTION => {
-            reply(from, request_id, host::platform_read_clipboard())
-        }
+        EVENT_CLIPBOARD_READ_SELECTION => reply(from, request_id, host::platform_read_clipboard()),
         EVENT_APPS_LIST | EVENT_APPS_OPEN => reply(
             from,
             request_id,
