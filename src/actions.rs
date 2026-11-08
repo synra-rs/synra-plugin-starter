@@ -27,6 +27,16 @@ const MAX_APP_ID: usize = 128;
 const MAX_REQUEST_ID: usize = 128;
 const MAX_RESPONSES: usize = 64;
 
+const SAFE_APPS: [(&str, &str, &str, &str); 2] = [
+    (
+        "synra.github",
+        "Synra GitHub",
+        "GH",
+        "https://github.com/synra-rs/synra-plugin-starter",
+    ),
+    ("synra.docs", "Synra 文档", "S", "https://synra-app.dev"),
+];
+
 static RESPONSES: OnceLock<Mutex<HashMap<String, Value>>> = OnceLock::new();
 
 fn responses() -> &'static Mutex<HashMap<String, Value>> {
@@ -192,6 +202,10 @@ pub(crate) fn on_event(event_json: &str) -> Outcome {
         Some(Value::Object(value)) => value,
         _ => return refused("badArgument", "event context has no object payload"),
     };
+    let from = match event.get("from").and_then(Value::as_str) {
+        Some(value) if is_device_id(value) => value,
+        _ => return refused("badArgument", "event context has no valid sender device"),
+    };
     if name == EVENT_RESPONSE {
         let Some(request_id) = payload.get("requestId").and_then(Value::as_str) else {
             return refused("badArgument", "event response has no request id");
@@ -208,13 +222,9 @@ pub(crate) fn on_event(event_json: &str) -> Outcome {
         responses.insert(request_id.to_owned(), Value::Object(payload.clone()));
         return Outcome::Ok(String::new());
     }
-    let from = match event.get("from").and_then(Value::as_str) {
-        Some(value) if is_device_id(value) => value,
-        _ => return refused("badArgument", "event context has no valid sender device"),
-    };
-    let request_id = match event.get("requestId").and_then(Value::as_str) {
+    let request_id = match payload.get("requestId").and_then(Value::as_str) {
         Some(value) if !value.is_empty() && value.len() <= MAX_REQUEST_ID => value,
-        _ => return refused("badArgument", "event context has no valid request id"),
+        _ => return refused("badArgument", "event payload has no valid request id"),
     };
     match name {
         EVENT_OPEN_URL => match payload.get("url").and_then(Value::as_str) {
@@ -238,14 +248,38 @@ pub(crate) fn on_event(event_json: &str) -> Outcome {
             ),
         },
         EVENT_CLIPBOARD_READ_SELECTION => reply(from, request_id, host::platform_read_clipboard()),
-        EVENT_APPS_LIST | EVENT_APPS_OPEN => reply(
+        EVENT_APPS_LIST => reply(
             from,
             request_id,
-            refused(
-                "unsupported",
-                "the current host does not expose a safe application catalog",
+            Outcome::Ok(
+                serde_json::Value::Array(
+                    SAFE_APPS
+                        .iter()
+                        .map(|(id, name, icon, _)| {
+                            serde_json::json!({ "id": id, "name": name, "icon": icon })
+                        })
+                        .collect(),
+                )
+                .to_string(),
             ),
         ),
+        EVENT_APPS_OPEN => {
+            let Some(app_id) = payload.get("appId").and_then(Value::as_str) else {
+                return reply(
+                    from,
+                    request_id,
+                    refused("badArgument", "event app id is invalid"),
+                );
+            };
+            let Some((_, _, _, url)) = SAFE_APPS.iter().find(|(id, _, _, _)| *id == app_id) else {
+                return reply(
+                    from,
+                    request_id,
+                    refused("badArgument", "event app id is not registered"),
+                );
+            };
+            reply(from, request_id, host::platform_open_url(url))
+        }
         _ => reply(
             from,
             request_id,
@@ -320,11 +354,14 @@ fn poll_response(value: &serde_json::Map<String, Value>) -> Outcome {
 
 fn reply(from: &str, request_id: &str, outcome: Outcome) -> Outcome {
     let payload = match outcome {
-        Outcome::Ok(value) => serde_json::json!({
-            "requestId": request_id,
-            "status": "ok",
-            "value": value,
-        }),
+        Outcome::Ok(value) => {
+            let value = serde_json::from_str::<Value>(&value).unwrap_or(Value::String(value));
+            serde_json::json!({
+                "requestId": request_id,
+                "status": "ok",
+                "value": value,
+            })
+        }
         Outcome::Err(error) => serde_json::json!({
             "requestId": request_id,
             "status": "error",
@@ -365,7 +402,8 @@ fn refused(code: &str, message: &str) -> Outcome {
 
 #[cfg(test)]
 mod tests {
-    use super::{is_device_id, is_supported_url};
+    use super::{EVENT_RESPONSE, RESPONSE_POLL, invoke, is_device_id, is_supported_url, on_event};
+    use serde_json::Value;
 
     #[test]
     fn validates_only_canonical_device_ids() {
@@ -381,5 +419,31 @@ mod tests {
         assert!(is_supported_url("http://localhost:8080"));
         assert!(!is_supported_url("file:///tmp/private"));
         assert!(!is_supported_url("https://example.com/a b"));
+    }
+
+    #[test]
+    fn stores_remote_responses_under_the_payload_request_id() {
+        let request_id = "01TESTREQUEST0000000000000000";
+        let event = serde_json::json!({
+            "event": EVENT_RESPONSE,
+            "from": "11111111-1111-4111-8111-111111111111",
+            "requestId": "network-envelope-request",
+            "payload": { "requestId": request_id, "status": "ok", "value": "done" }
+        });
+
+        assert!(matches!(
+            on_event(&event.to_string()),
+            super::Outcome::Ok(_)
+        ));
+        let result = invoke(
+            RESPONSE_POLL,
+            &serde_json::json!({ "requestId": request_id }).to_string(),
+        );
+        let super::Outcome::Ok(value) = result else {
+            panic!("the stored response should be readable")
+        };
+        let parsed: Value = serde_json::from_str(&value).expect("a response object");
+        assert_eq!(parsed["requestId"], request_id);
+        assert_eq!(parsed["status"], "ok");
     }
 }

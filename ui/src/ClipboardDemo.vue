@@ -32,6 +32,10 @@ async function readFromComputer() {
       readAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
       return
     }
+    if (response.value === null) {
+      readAction.state.value = { status: 'failed', error: 'empty_content' }
+      return
+    }
     const text = typeof response.value === 'string' ? response.value : undefined
     if (text === undefined || text.length > MAX_CLIPBOARD) {
       readAction.state.value = { status: 'failed', error: 'internal' }
