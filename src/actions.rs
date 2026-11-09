@@ -237,7 +237,11 @@ pub(crate) fn on_event(event_json: &str) -> Outcome {
                 refused("badArgument", "event clipboard text is invalid"),
             ),
         },
-        EVENT_CLIPBOARD_READ_SELECTION => reply(from, request_id, host::platform_read_clipboard()),
+        EVENT_CLIPBOARD_READ_SELECTION => reply(
+            from,
+            request_id,
+            host::platform_open_path("synra-selection://copy"),
+        ),
         EVENT_APPS_LIST => reply(
             from,
             request_id,

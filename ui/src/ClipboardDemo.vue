@@ -13,6 +13,39 @@ const readAction = useDemoAction(props.host, 'starter.clipboard-read-selection')
 const writeAction = useDemoAction(props.host, 'starter.clipboard-write')
 const canUseTarget = computed(() => Boolean(props.host && props.targetId && props.targetOnline))
 
+async function copyToPhone(text: string) {
+  let hostFailure: unknown
+  if (props.host?.clipboard) {
+    try {
+      await props.host.clipboard.write(text)
+      return
+    }
+    catch (reason: unknown) {
+      hostFailure = reason
+    }
+  }
+  if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text)
+      return
+    }
+    catch (reason: unknown) {
+      hostFailure = reason
+    }
+  }
+  const textarea = document.createElement('textarea')
+  textarea.value = text
+  textarea.setAttribute('readonly', '')
+  textarea.style.position = 'fixed'
+  textarea.style.opacity = '0'
+  document.body.appendChild(textarea)
+  textarea.select()
+  const copied = document.execCommand('copy')
+  textarea.remove()
+  if (!copied)
+    throw hostFailure ?? new Error('unsupported')
+}
+
 async function readFromComputer() {
   if (!canUseTarget.value)
     return
@@ -42,10 +75,7 @@ async function readFromComputer() {
       return
     }
     returnedText.value = text
-    if (props.host?.clipboard)
-      await props.host.clipboard.write(text)
-    else if (navigator.clipboard)
-      await navigator.clipboard.writeText(text)
+    await copyToPhone(text)
     phoneCopyMessage.value = '已复制到手机剪贴板'
     readAction.state.value = { status: 'completed', error: '' }
   }
