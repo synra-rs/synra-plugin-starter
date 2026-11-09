@@ -56,32 +56,34 @@ async function readFromComputer() {
   if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
     return
   try {
-    const response = await waitForRemoteResponse(props.host!, requestId)
+    const response = await waitForRemoteResponse(props.host!, requestId, stage => {
+      readAction.state.value = { ...readAction.state.value, stage }
+    })
     if (!response) {
-      readAction.state.value = { status: 'timeout', error: 'timeout' }
+      readAction.state.value = { status: 'timeout', error: 'timeout', stage: '等待电脑端响应超时' }
       return
     }
     if (response.status === 'error') {
-      readAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
+      readAction.state.value = { status: 'failed', error: response.code ?? 'internal', stage: '已收到电脑端错误响应' }
       return
     }
     if (response.value === null) {
-      readAction.state.value = { status: 'failed', error: 'empty_content' }
+      readAction.state.value = { status: 'failed', error: 'empty_content', stage: '电脑端返回了空内容' }
       return
     }
     const text = typeof response.value === 'string' ? response.value : undefined
     if (text === undefined || text.length > MAX_CLIPBOARD) {
-      readAction.state.value = { status: 'failed', error: 'internal' }
+      readAction.state.value = { status: 'failed', error: 'internal', stage: '电脑端返回内容格式不正确' }
       return
     }
     returnedText.value = text
     await copyToPhone(text)
     phoneCopyMessage.value = '已复制到手机剪贴板'
-    readAction.state.value = { status: 'completed', error: '' }
+    readAction.state.value = { status: 'completed', error: '', stage: '已收到文本并写入手机剪贴板' }
   }
   catch (reason: unknown) {
     phoneCopyMessage.value = ''
-    readAction.state.value = { status: 'failed', error: typeof reason === 'object' && reason !== null && 'code' in reason && typeof reason.code === 'string' ? reason.code : 'unsupported' }
+    readAction.state.value = { status: 'failed', error: typeof reason === 'object' && reason !== null && 'code' in reason && typeof reason.code === 'string' ? reason.code : 'unsupported', stage: '手机剪贴板写入失败' }
   }
 }
 
@@ -115,19 +117,21 @@ async function sendToComputer() {
   if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
     return
   try {
-    const response = await waitForRemoteResponse(props.host!, requestId)
+    const response = await waitForRemoteResponse(props.host!, requestId, stage => {
+      writeAction.state.value = { ...writeAction.state.value, stage }
+    })
     if (!response) {
-      writeAction.state.value = { status: 'timeout', error: 'timeout' }
+      writeAction.state.value = { status: 'timeout', error: 'timeout', stage: '等待电脑端响应超时' }
     }
     else if (response.status === 'ok') {
-      writeAction.state.value = { status: 'completed', error: '' }
+      writeAction.state.value = { status: 'completed', error: '', stage: '已收到电脑端成功响应' }
     }
     else {
-      writeAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
+      writeAction.state.value = { status: 'failed', error: response.code ?? 'internal', stage: '已收到电脑端错误响应' }
     }
   }
   catch {
-    writeAction.state.value = { status: 'failed', error: 'internal' }
+    writeAction.state.value = { status: 'failed', error: 'internal', stage: '响应处理失败' }
   }
 }
 
@@ -173,6 +177,9 @@ function updateLocalClipboard(event: Event) {
         <p v-else-if="readAction.state.value.error" class="error" role="alert">
           {{ messageFor(readAction.state.value.error) }}
         </p>
+        <p v-if="readAction.state.value.stage" class="debug-stage" role="status">
+          调试：{{ readAction.state.value.stage }}
+        </p>
       </div>
       <div>
         <h3>手机到电脑</h3>
@@ -195,6 +202,9 @@ function updateLocalClipboard(event: Event) {
         </p>
         <p v-else-if="writeAction.state.value.error" class="error" role="alert">
           {{ messageFor(writeAction.state.value.error) }}
+        </p>
+        <p v-if="writeAction.state.value.stage" class="debug-stage" role="status">
+          调试：{{ writeAction.state.value.stage }}
         </p>
       </div>
     </div>

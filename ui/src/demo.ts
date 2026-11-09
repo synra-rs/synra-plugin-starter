@@ -6,6 +6,7 @@ export type DemoStatus = 'idle' | 'sending' | 'queued' | 'completed' | 'unsuppor
 export interface DemoState {
   status: DemoStatus
   error: string
+  stage?: string
 }
 
 export const DEMO_TIMEOUT_MS = 8000
@@ -60,24 +61,45 @@ function remoteResponse(value: unknown): RemoteResponse | undefined {
   }
 }
 
-export async function waitForRemoteResponse(host: StarterHost, requestId: string): Promise<RemoteResponse | undefined> {
+export async function waitForRemoteResponse(
+  host: StarterHost,
+  requestId: string,
+  onStage?: (stage: string) => void,
+): Promise<RemoteResponse | undefined> {
   const deadline = Date.now() + RESPONSE_TIMEOUT_MS
+  let reportedPending = false
+  onStage?.('开始轮询电脑端响应')
   while (Date.now() < deadline) {
     try {
       const answer = remoteResponse(await host.self.invoke('starter.response-poll', { requestId }))
-      if (answer && answer.status !== 'pending')
+      if (answer && answer.status !== 'pending') {
+        onStage?.(`已收到电脑端${answer.status === 'ok' ? '成功' : '错误'}响应`)
         return answer
+      }
+      if (!reportedPending) {
+        reportedPending = true
+        onStage?.('电脑端已收到请求，等待执行结果')
+      }
     }
-    catch {
-      // The stateful headless instance may still be handling the response event.
+    catch (reason: unknown) {
+      const code = codeOf(reason)
+      if (!reportedPending) {
+        reportedPending = true
+        onStage?.(`响应轮询暂不可用（${code}），继续等待`)
+      }
     }
     await new Promise(resolve => setTimeout(resolve, 150))
   }
+  onStage?.('等待电脑端响应超时')
   return undefined
 }
 
 export function useDemoAction(host: StarterHost | undefined, action: string) {
-  const state = shallowRef<DemoState>({ status: host ? 'idle' : 'unsupported', error: host ? '' : 'bridge_unavailable' })
+  const state = shallowRef<DemoState>({
+    status: host ? 'idle' : 'unsupported',
+    error: host ? '' : 'bridge_unavailable',
+    stage: host ? '' : '宿主桥接不可用',
+  })
   let active = false
   let disposed = false
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -96,16 +118,16 @@ export function useDemoAction(host: StarterHost | undefined, action: string) {
     if (!host || active || disposed)
       return undefined
     active = true
-    state.value = { status: 'sending', error: '' }
+    state.value = { status: 'sending', error: '', stage: '正在调用插件动作' }
     let expired = false
     timer = setTimeout(() => {
       expired = true
-      state.value = { status: 'timeout', error: 'timeout' }
+      state.value = { status: 'timeout', error: 'timeout', stage: '插件动作调用超时' }
     }, DEMO_TIMEOUT_MS)
     try {
       const result = await host.self.invoke(action, args)
       if (!expired && !disposed)
-        state.value = { status: 'queued', error: '' }
+        state.value = { status: 'queued', error: '', stage: '请求已发出，等待电脑端处理' }
       return result
     }
     catch (reason: unknown) {
@@ -114,6 +136,7 @@ export function useDemoAction(host: StarterHost | undefined, action: string) {
         state.value = {
           status: code === 'capability_denied' ? 'denied' : code === 'device_offline' ? 'offline' : code === 'unsupported' ? 'unsupported' : 'failed',
           error: code,
+          stage: `插件动作调用失败（${code}）`,
         }
       }
       return undefined

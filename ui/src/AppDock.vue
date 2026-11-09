@@ -20,17 +20,19 @@ async function refresh() {
   const queued = await listAction.run({ target: props.targetId, requestId })
   if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
     return
-  const response = await waitForRemoteResponse(props.host!, requestId)
+  const response = await waitForRemoteResponse(props.host!, requestId, stage => {
+    listAction.state.value = { ...listAction.state.value, stage }
+  })
   if (!response) {
-    listAction.state.value = { status: 'timeout', error: 'timeout' }
+    listAction.state.value = { status: 'timeout', error: 'timeout', stage: '等待电脑端响应超时' }
     return
   }
   if (response.status === 'error') {
-    listAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
+    listAction.state.value = { status: 'failed', error: response.code ?? 'internal', stage: '已收到电脑端错误响应' }
     return
   }
   if (!Array.isArray(response.value)) {
-    listAction.state.value = { status: 'failed', error: 'internal' }
+    listAction.state.value = { status: 'failed', error: 'internal', stage: '电脑端返回的应用目录格式不正确' }
     return
   }
   apps.value = response.value.flatMap((item: unknown) => {
@@ -40,7 +42,7 @@ async function refresh() {
       return []
     return [{ id: item.id, name: item.name, icon: 'icon' in item && typeof item.icon === 'string' ? item.icon : undefined }]
   }).slice(0, 64)
-  listAction.state.value = { status: 'completed', error: '' }
+  listAction.state.value = { status: 'completed', error: '', stage: `已收到电脑端应用目录（${apps.value.length} 项）` }
 }
 
 async function openApp(app: AppEntry) {
@@ -51,15 +53,17 @@ async function openApp(app: AppEntry) {
   const queued = await openAction.run({ target: props.targetId, requestId, appId: app.id })
   if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
     return
-  const response = await waitForRemoteResponse(props.host!, requestId)
+  const response = await waitForRemoteResponse(props.host!, requestId, stage => {
+    openAction.state.value = { ...openAction.state.value, stage }
+  })
   if (!response) {
-    openAction.state.value = { status: 'timeout', error: 'timeout' }
+    openAction.state.value = { status: 'timeout', error: 'timeout', stage: '等待电脑端响应超时' }
   }
   else if (response.status === 'ok') {
-    openAction.state.value = { status: 'completed', error: '' }
+    openAction.state.value = { status: 'completed', error: '', stage: '已收到电脑端成功响应' }
   }
   else {
-    openAction.state.value = { status: 'failed', error: response.code ?? 'internal' }
+    openAction.state.value = { status: 'failed', error: response.code ?? 'internal', stage: '已收到电脑端错误响应' }
   }
 }
 
@@ -108,6 +112,9 @@ watch(() => [props.targetId, props.targetOnline] as const, ([targetId, online], 
     <p v-else-if="listAction.state.value.error" class="error" role="alert">
       {{ messageFor(listAction.state.value.error) }}
     </p>
+    <p v-if="listAction.state.value.stage" class="debug-stage" role="status">
+      调试：{{ listAction.state.value.stage }}
+    </p>
     <p v-if="openAction.state.value.status === 'completed'" class="success" role="status">
       电脑端已执行打开请求。
     </p>
@@ -116,6 +123,9 @@ watch(() => [props.targetId, props.targetOnline] as const, ([targetId, online], 
     </p>
     <p v-else-if="openAction.state.value.error" class="error" role="alert">
       {{ messageFor(openAction.state.value.error) }}
+    </p>
+    <p v-if="openAction.state.value.stage" class="debug-stage" role="status">
+      调试：{{ openAction.state.value.stage }}
     </p>
     <details class="permission-note">
       <summary>这项演示需要什么权限</summary>

@@ -26,19 +26,21 @@ async function send() {
   if (typeof queued !== 'object' || queued === null || !('requestId' in queued) || typeof queued.requestId !== 'string')
     return
   try {
-    const response = await waitForRemoteResponse(props.host!, requestId)
+    const response = await waitForRemoteResponse(props.host!, requestId, stage => {
+      action.state.value = { ...action.state.value, stage }
+    })
     if (!response) {
-      action.state.value = { status: 'timeout', error: 'timeout' }
+      action.state.value = { status: 'timeout', error: 'timeout', stage: '等待电脑端响应超时' }
     }
     else if (response.status === 'ok') {
-      action.state.value = { status: 'completed', error: '' }
+      action.state.value = { status: 'completed', error: '', stage: '已收到电脑端成功响应' }
     }
     else {
-      action.state.value = { status: 'failed', error: response.code ?? 'internal' }
+      action.state.value = { status: 'failed', error: response.code ?? 'internal', stage: '已收到电脑端错误响应' }
     }
   }
   catch {
-    action.state.value = { status: 'failed', error: 'internal' }
+    action.state.value = { status: 'failed', error: 'internal', stage: '响应处理失败' }
   }
 }
 </script>
@@ -82,6 +84,9 @@ async function send() {
     </p>
     <p v-else-if="action.state.value.status === 'queued'" class="success" role="status">
       请求已发出，等待电脑端执行结果。
+    </p>
+    <p v-if="action.state.value.stage" class="debug-stage" role="status">
+      调试：{{ action.state.value.stage }}
     </p>
     <p v-else-if="action.state.value.error" class="error" role="alert">
       {{ messageFor(action.state.value.error) }}

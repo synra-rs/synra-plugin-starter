@@ -28,6 +28,7 @@ p { line-height: 1.65; }
 .eyebrow, .card-kicker { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: 0.16em; color: var(--success); }
 .description, .hint { color: var(--muted); line-height: 1.65; }
 .hint { font-size: 14px; }
+.debug-stage { color: var(--muted); font-size: 12px; line-height: 1.5; }
 .card { padding: 24px; margin-bottom: 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
 .hero-card { padding: clamp(24px, 5vw, 40px); }
 .hero-card h2 { max-width: 680px; margin: 10px 0; font-size: clamp(24px, 4vw, 32px); }
